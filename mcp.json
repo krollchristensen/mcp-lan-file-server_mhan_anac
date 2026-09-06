@@ -1,0 +1,24 @@
+{
+  "servers": {
+    "lan-file-server": {
+      "url": "http://192.168.1.50:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer min-hemmelige-lan-token"
+      }
+    },
+    "local-node-server": {
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "C:\\path\\to\\mcp\\server.js"
+      ]
+    }
+  },
+  "mcpServers": {
+    "lan-file-server": {
+      "url": "http://127.0.0.1:3000/mcp",
+      "headers": {
+        "Authorization": "Bearer min-hemmelige-lan-token"
+      }
+    }
+  }
+}

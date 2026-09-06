@@ -1,0 +1,4 @@
+Denne fil ligger fysisk på computeren uden for Docker-containeren.
+Skrevet via MCP: 2026-09-06T08:49:40.197Z
+
+Mikkel

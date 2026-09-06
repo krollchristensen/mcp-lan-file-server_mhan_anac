@@ -1,0 +1,14 @@
+services:
+  mcp-file-server:
+    build: .
+    container_name: mcp-lan-file-server
+    ports:
+      - "3001:3000"
+    environment:
+      PORT: 3000
+      DATA_FILE: /data/shared.txt
+      MCP_TOKEN: ${MCP_TOKEN}
+      ALLOWED_HOSTS: ${ALLOWED_HOSTS}
+    volumes:
+      - ./shared:/data
+    restart: unless-stopped

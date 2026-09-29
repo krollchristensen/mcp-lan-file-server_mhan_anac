@@ -1,137 +1,67 @@
-# MCP LAN-test med Docker, klienter og Copilot
+# MCP LAN-test
 
-Dette projekt er et lille forsøg med en fælles MCP-server på et lokalt netværk.
+## Hvad tester vi?
 
-Målet er at undersøge, om **MIKC** kan køre én MCP-server i Docker på sin PC, mens **Mikkel Lektor Hansen** og **András** forbinder fra deres egne PC'er og læser/skriver i den samme tekstfil gennem MCP.
+Vi tester, om én MCP-server kan køre i Docker på **MIKC's PC**, mens **Lektor Hansen** og **András** forbinder fra deres egne PC'er over et lokalt Wi-Fi og bruger den samme `shared.txt`.
 
-Det vigtige er, at klienterne **ikke får en Windows-share eller direkte adgang til filen**. De får kun adgang til de funktioner, som MCP-serveren udstiller.
+Målet er at vise:
 
-## Hvad vil vi vise?
-
-Vi vil teste fire ting:
-
-1. At MCP-serveren kan køre isoleret i Docker på MIKC's PC.
-2. At en klient på en anden PC kan nå MCP-serveren over et lokalt LAN.
-3. At flere klienter kan læse og ændre den samme `shared.txt`.
-4. At en AI-klient som GitHub Copilot kan bruge de samme MCP-tools.
-
-Hvis testen lykkes, har vi et konkret eksempel på en **fælles MCP-service**, som flere AI-agenter kan bruge.
-
-## Arkitektur
+- at MCP-serveren ikke behøver køre på samme PC som klienten
+- at flere klienter kan bruge den samme MCP-server
+- at klienterne ikke får direkte adgang til MIKC's filsystem
+- at GitHub Copilot kan bruge MCP-serverens tools
+- at Docker giver MCP-serveren kontrolleret adgang til `shared.txt`
 
 ```mermaid
 flowchart LR
-    H["Mikkel Lektor Hansen<br>klient / Copilot"]
-    A["András<br>klient / Copilot"]
-
-    subgraph LAN["Wi-Fi: AIgutterne"]
-        R["Trådløs router<br>DHCP"]
-    end
+    H["Mikkel Lektor Hansen<br>Copilot / MCP-klient"]
+    A["András<br>Copilot / MCP-klient"]
+    R["Wi-Fi: AIgutterne"]
 
     subgraph MIKC["MIKC's PC"]
-        P["Windows port 3001"]
-
-        subgraph D["Docker"]
-            M["MCP-server<br>port 3000"]
-        end
-
+        P["Port 3001"]
+        D["Docker"]
+        M["MCP-server<br>port 3000"]
         F["shared/shared.txt"]
-
-        P --> M
-        M -->|"Docker volume"| F
+        P --> D
+        D --> M
+        M --> F
     end
 
     H --> R
     A --> R
-    R -->|"MCP HTTP"| P
+    R --> P
 ```
-
-Routeren uddeler IP-adresser automatisk med DHCP.
-
-Eksempel:
-
-```text
-MIKC:                 192.168.8.100
-Mikkel Lektor Hansen: 192.168.8.101
-András:               192.168.8.102
-```
-
-Adresserne er kun eksempler. MIKC's faktiske IP findes med `ipconfig`.
 
 ## Roller
 
 ### MIKC
 
-MIKC er servermaskinen.
+MIKC har serveren og skal:
 
-Her kører:
-
-- Docker Desktop
-- MCP-serveren
-- port `3001` på Windows
-- `shared/shared.txt`
-
-MIKC skal altså starte serveren.
-
-### Mikkel Lektor Hansen og András
-
-Mikkel Lektor Hansen og András er klienter.
-
-De skal **ikke** starte MCP-serveren og skal derfor **ikke køre**:
+1. forbinde sin PC til Wi-Fi-netværket `AIgutterne`
+2. starte Docker Desktop
+3. finde sin IP-adresse med:
 
 ```powershell
-npm start
+ipconfig
 ```
 
-Hvis man gør det, forsøger man at starte sin egen MCP-server lokalt. Det er derfor fejlen:
-
-```text
-MCP_TOKEN mangler. Opret en .env-fil ...
-```
-
-ikke er et problem for klienttesten.
-
-På klient-PC'erne skal der kun være:
-
-- Node.js
-- projektet klonet
-- `npm install` kørt
-- en terminal/IDE
-- senere evt. GitHub Copilot som MCP-klient
-
-## Før workshoppen
-
-Mikkel Lektor Hansen og András kan forberede:
-
-```powershell
-git clone https://github.com/krollchristensen/mcp-lan-file-server_mhan_anac.git
-cd mcp-lan-file-server_mhan_anac
-npm install
-```
-
-De behøver ikke Docker.
-
-## Del 1 – MIKC tester lokalt først
-
-Inden vi bruger LAN'et, tester MIKC hele kæden på sin egen PC.
-
-### 1. Start Docker
-
-Sørg for, at `.env` på MIKC's PC indeholder et MCP-token og mindst:
+4. sætte IP-adressen i `.env`, fx:
 
 ```env
-MCP_TOKEN=<vores-token>
-ALLOWED_HOSTS=localhost,127.0.0.1
+MCP_TOKEN=min-hemmelige-lan-token
+ALLOWED_HOSTS=localhost,127.0.0.1,192.168.8.100
 ```
 
-Start serveren:
+5. starte MCP-serveren:
 
 ```powershell
 docker compose down
 docker compose up --build -d
 ```
 
-Kontroller:
+6. kontrollere at den kører:
 
 ```powershell
 docker compose ps
@@ -143,129 +73,10 @@ Der skal stå noget i retning af:
 0.0.0.0:3001->3000/tcp
 ```
 
-Det betyder:
-
-```text
-Windows:3001
-     ↓
-Docker:3000
-     ↓
-MCP-server
-```
-
-### 2. Test HTTP
+7. teste serveren:
 
 ```powershell
 curl.exe http://127.0.0.1:3001/health
-```
-
-Forventet svar:
-
-```json
-{"status":"ok"}
-```
-
-### 3. Test MCP-klienten lokalt
-
-```powershell
-$env:MCP_URL="http://127.0.0.1:3001/mcp"
-$env:MCP_TOKEN="<vores-token>"
-npm run client
-```
-
-Klienten:
-
-1. forbinder til MCP-serveren
-2. viser serverens tools
-3. læser `shared.txt`
-4. tilføjer en linje
-5. læser filen igen
-
-Serveren udstiller disse tools:
-
-```text
-read_text_file
-write_text_file
-append_text_file
-```
-
-Åbn derefter:
-
-```text
-shared/shared.txt
-```
-
-Hvis den nye linje står dér, virker den lokale kæde.
-
-## Hvad gør Docker?
-
-MCP-serveren arbejder inde i containeren med:
-
-```text
-/data/shared.txt
-```
-
-I `docker-compose.yml` er mappen koblet til værtsmaskinen:
-
-```yaml
-volumes:
-  - ./shared:/data
-```
-
-Det betyder:
-
-```text
-Docker                    MIKC's PC
-
-/data/shared.txt   <-->   ./shared/shared.txt
-```
-
-MCP-serveren er altså isoleret i Docker, men filen ligger fysisk på MIKC's PC.
-
-Containeren kan genstartes uden at filens indhold forsvinder.
-
-## Del 2 – Opret LAN'et
-
-MIKC starter den trådløse router og opretter Wi-Fi:
-
-```text
-AIgutterne
-```
-
-Alle tre PC'er forbindes til dette netværk.
-
-På MIKC's PC:
-
-```powershell
-ipconfig
-```
-
-Find IPv4-adressen på forbindelsen til `AIgutterne`.
-
-Eksempel:
-
-```text
-192.168.8.100
-```
-
-MIKC opdaterer derefter `.env`:
-
-```env
-MCP_TOKEN=<vores-token>
-ALLOWED_HOSTS=localhost,127.0.0.1,192.168.8.100
-```
-
-og genstarter:
-
-```powershell
-docker compose down
-docker compose up --build -d
-```
-
-Test på MIKC's PC:
-
-```powershell
-curl.exe http://192.168.8.100:3001/health
 ```
 
 Forventet:
@@ -274,9 +85,52 @@ Forventet:
 {"status":"ok"}
 ```
 
-## Del 3 – Mikkel Lektor Hansen tester forbindelsen
+### Vigtigt om `/mcp`
 
-På Mikkel Lektor Hansens PC:
+Hvis man åbner:
+
+```text
+http://127.0.0.1:3001/mcp
+```
+
+direkte i en browser, får man:
+
+```json
+{"error":"Unauthorized"}
+```
+
+Det er **forventet**.
+
+Browseren sender ikke vores MCP-token i `Authorization`-headeren. Det viser faktisk, at MCP-serveren svarer, og at adgangskontrollen virker.
+
+Brug derfor `/health` til den simple browsertest og MCP-klienten eller Copilot til selve MCP-testen.
+
+### Lektor Hansen og András
+
+De er klienter og skal **ikke** køre:
+
+```powershell
+npm start
+```
+
+Det ville forsøge at starte deres egen MCP-server.
+
+De skal kun have:
+
+- Node.js installeret
+- projektet klonet
+- kørt `npm install`
+- deres IDE / Copilot klar
+
+## Først: test med Node-klienten
+
+Antag at MIKC får IP-adressen:
+
+```text
+192.168.8.100
+```
+
+På  Lektor Hansens og András' PC:
 
 ```powershell
 Test-NetConnection 192.168.8.100 -Port 3001
@@ -288,92 +142,83 @@ Vi vil se:
 TcpTestSucceeded : True
 ```
 
-Hvis det virker, kører han klienten:
+Derefter:
+kKlienttesten -> Den bruges før Copilot, så vi først beviser, at MCP-forbindelsen over LAN virker.
 
 ```powershell
 $env:MCP_URL="http://192.168.8.100:3001/mcp"
-$env:MCP_TOKEN="<vores-token>"
+$env:MCP_TOKEN="min-hemmelige-lan-token"
+
 npm run client
 ```
 
-MIKC åbner samtidig `shared/shared.txt` på sin PC.
+Klienten læser `shared.txt`, skriver en linje og læser filen igen.
 
-Når klienten kører, skal der komme en ny linje i filen.
-
-Det viser:
+MIKC kan samtidig åbne:
 
 ```text
-Mikkel Lektor Hansens PC
-          ↓
-         LAN
-          ↓
-MIKC:3001
-          ↓
-       Docker
-          ↓
-     MCP-server
-          ↓
-     shared.txt
+shared/shared.txt
 ```
 
-## Del 4 – András tester den samme server
+og se ændringerne.
 
-András gør det samme:
+## MCP-konfiguration til Copilot
 
-```powershell
-Test-NetConnection 192.168.8.100 -Port 3001
+Når Node-klienten virker, tester vi GitHub Copilot eller anden agent.
+
+### MIKC – lokal Copilot
+
+På MIKC's PC:
+
+```json
+{
+  "servers": {
+    "lan-file-server": {
+      "url": "http://127.0.0.1:3001/mcp",
+      "requestInit": {
+        "headers": {
+          "Authorization": "Bearer min-hemmelige-lan-token"
+        }
+      }
+    }
+  }
+}
 ```
 
-og derefter:
+### Lektor Hansen og András – Copilot over LAN
 
-```powershell
-$env:MCP_URL="http://192.168.8.100:3001/mcp"
-$env:MCP_TOKEN="<vores-token>"
-npm run client
+Begge bruger MIKC's IP-adresse:
+
+```json
+{
+  "servers": {
+    "lan-file-server": {
+      "url": "http://192.168.8.100:3001/mcp",
+      "requestInit": {
+        "headers": {
+          "Authorization": "Bearer min-hemmelige-lan-token"
+        }
+      }
+    }
+  }
+}
 ```
 
-Det interessante er, at András først bør kunne **læse den ændring, som Mikkel Lektor Hansen lige har lavet**.
+Erstat `192.168.8.100` med MIKC's faktiske IP-adresse på `AIgutterne`.
 
-Derefter tilføjer András' klient selv en ny linje.
+I JetBrains åbnes Copilot Chat i **Agent mode**, derefter **Tools / Configure MCP server → Add MCP Tools**, og konfigurationen indsættes i `mcp.json`.
 
-Hvis begge ændringer kan ses i `shared.txt`, har vi vist, at to uafhængige klienter bruger samme MCP-server og samme datakilde.
-
-## Del 5 – Test med Copilot
-
-Når `npm run client` virker fra begge PC'er, tester vi med GitHub Copilot eller en anden MCP-kompatibel AI-klient.
-
-Det er med vilje sidste trin.
-
-Hvis Copilot fejler, men `npm run client` virker, ved vi allerede, at:
-
-- LAN'et virker
-- port 3001 virker
-- Docker virker
-- MCP-serveren virker
-- tokenet virker
-- den delte fil virker
-
-Så er fejlen isoleret til AI-klientens MCP-konfiguration.
-
-På MIKC's PC er MCP-adressen:
+Copilot bør derefter kunne se:
 
 ```text
-http://127.0.0.1:3001/mcp
+read_text_file
+write_text_file
+append_text_file
 ```
 
-På Mikkel Lektor Hansens og András' PC'er er MCP-adressen:
+## Test med Copilot
 
-```text
-http://<MIKC-IP>:3001/mcp
-```
-
-Eksempel:
-
-```text
-http://192.168.8.100:3001/mcp
-```
-
-Når Copilot kan se MCP-serverens tools, kan vi fx bede den:
+På lektor Hansens PC:
 
 ```text
 Brug MCP-serveren til at læse den delte tekstfil.
@@ -383,106 +228,58 @@ Derefter:
 
 ```text
 Brug MCP-serveren til at tilføje:
-"Hej fra Mikkel Lektor Hansens Copilot"
+"Hej fra lektor Hansens Copilot"
 ```
 
-og på András' PC:
+På András' PC:
 
 ```text
-Brug MCP-serveren til at læse filen og tilføje:
+Læs den delte tekstfil gennem MCP og tilføj:
 "Hej fra András' Copilot"
 ```
 
-MIKC kan se resultatet direkte i `shared/shared.txt`.
+MIKC åbner derefter `shared/shared.txt`.
 
-## Hvad har vi bevist, hvis det virker?
-
-Hvis testen lykkes, kan vi konkludere:
-
-- MCP-serveren behøver ikke køre på samme PC som klienten.
-- Én MCP-server kan bruges af flere klienter.
-- Docker kan bruges til at isolere MCP-serverens runtime.
-- Docker-volume giver serveren kontrolleret adgang til en fil på værtsmaskinen.
-- Mikkel Lektor Hansen og András behøver ikke direkte adgang til MIKC's filsystem.
-- Klienterne får kun de capabilities, MCP-serveren udstiller.
-- En AI-agent kan bruge samme fælles MCP-server som en almindelig MCP-testklient.
-
-Det centrale er altså ikke selve tekstfilen. Den er bare vores simple bevis.
-
-Senere kunne samme princip bruges til fx:
-
-- dokumenter
-- databaser
-- REST API'er
-- Git
-- interne systemer
-- fælles værktøjer for AI-agenter
-
-## Hvad har vi ikke bevist?
-
-Forsøget er en prototype på et lukket LAN.
-
-Det viser ikke endnu:
-
-- produktionssikkerhed
-- interneteksponering
-- mange samtidige brugere
-- avanceret rettighedsstyring
-- håndtering af samtidige writes
-- robusthed ved netværksfejl
-
-Det kan være næste eksperiment.
-
-## Fejlfinding
-
-Hvis Mikkel Lektor Hansen eller András ikke kan nå serveren:
-
-```powershell
-Test-NetConnection <MIKC-IP> -Port 3001
-```
-
-Hvis resultatet er:
+Hvis begge tekster står i filen, har vi vist:
 
 ```text
-TcpTestSucceeded : False
+Mikkel Lektor Hansen ─┐
+                      ├── MCP-server i Docker ── shared.txt
+András ────────────────┘
 ```
 
-kontroller:
+## Hvad gør Docker?
 
-- at alle er på `AIgutterne`
-- at MIKC's IP er korrekt
-- at Docker-containeren kører
-- at port `3001` er eksponeret
-- Windows Firewall
-- at `ALLOWED_HOSTS` indeholder MIKC's LAN-IP
+Docker kører MCP-serveren isoleret.
 
-På MIKC's PC:
-
-```powershell
-docker compose ps
-docker compose logs
-```
-
-## Kort workshop-rækkefølge
+Serveren ser filen som:
 
 ```text
-1. MIKC tester localhost
-        ↓
-2. Alle forbinder til AIgutterne
-        ↓
-3. MIKC finder sin DHCP-IP
-        ↓
-4. MIKC genstarter Docker med LAN-IP i ALLOWED_HOSTS
-        ↓
-5. Mikkel Lektor Hansen tester port 3001
-        ↓
-6. Mikkel Lektor Hansen kører npm run client
-        ↓
-7. Vi ser ændringen i shared.txt
-        ↓
-8. András kører npm run client
-        ↓
-9. Vi ser begge ændringer i shared.txt
-        ↓
-10. Vi tester Copilot mod samme MCP-server
+/data/shared.txt
 ```
+
+men `docker-compose.yml` mapper:
+
+```yaml
+volumes:
+  - ./shared:/data
+```
+
+så den virkelige fil ligger på MIKC's PC:
+
+```text
+shared/shared.txt
+```
+
+Klienterne får derfor ikke direkte adgang til MIKC's filsystem. De kan kun gøre det, MCP-serverens tools tillader.
+
+## Hvad kan vi konkludere?
+
+Hvis testen virker, har vi vist:
+
+- én MCP-server kan deles af flere klienter
+- MCP kan bruges over et lokalt netværk
+- Mikkel Lektor Hansen og András behøver ikke Docker
+- klienterne behøver ikke direkte adgang til filen
+- Docker kan give MCP-serveren kontrolleret adgang til lokale data
+- Copilot kan bruge samme remote MCP-server som en almindelig MCP-klient

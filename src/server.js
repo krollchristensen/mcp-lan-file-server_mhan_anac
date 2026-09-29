@@ -9,7 +9,7 @@ const PORT = Number(process.env.PORT ?? 3000);
 const HOST = '0.0.0.0';
 const DATA_FILE = process.env.DATA_FILE ?? '/data/shared.txt';
 const MCP_TOKEN = process.env.MCP_TOKEN;
-
+//Bør ændres
 if (!MCP_TOKEN) {
   throw new Error('MCP_TOKEN mangler. Opret en .env-fil ud fra .env.');
 }
